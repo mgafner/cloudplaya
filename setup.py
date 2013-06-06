@@ -25,6 +25,7 @@ setup(name=PACKAGE_NAME,
       install_requires=[
           'mechanize>=0.2.5',
           'requests>=0.13.2',
+          'ez_setup',
       ],
       maintainer='Christian Hammond',
       maintainer_email='chipx86@chipx86.com',
