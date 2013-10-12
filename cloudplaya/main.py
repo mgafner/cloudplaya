@@ -49,8 +49,15 @@ class Authenticate(Command):
 
 class DownloadAll(Command):
     """Downloads all songs, all albums, all artists."""
+    """
+    Change Description : Keep simple folder structure
     DEFAULT_FORMAT = os.path.join('%(artist_name)s', '%(album_name)s',
                                   '%(track_num)02d. %(title)s.%(extension)s')
+    """
+
+    DEFAULT_FORMAT = os.path.join('%(album_name)s',
+                                  '%(title)s.%(extension)s')
+
 
     def add_options(self, parser):
         parser.add_option('--format', default=self.DEFAULT_FORMAT,
