@@ -23,10 +23,10 @@ Note that it's possible you may have to repeat this on occasion.
 
 To authenticate, run::
 
-    $ cloudplaya authenticate --username <email_address> --password <password>
+    $ cloudplaya authenticate --username <email_address> 
 
-Replace ``<email_address>`` and ``<password>`` with your Amazon account
-e-mail and password above.
+Replace ``<email_address>`` with your Amazon account e-mail. Cloudplaya will 
+prompt you for your password. 
 
 You're then ready to use cloudplaya!
 
