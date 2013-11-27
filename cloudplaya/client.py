@@ -81,6 +81,15 @@ class Client(object):
 
         self._load_session()
 
+    def _find_signin_form(self, form):
+        required_controls = (
+                ('email', 'email'),
+                ('password', 'password'),
+                ('create', 'radio'),
+        )
+        controls = [(c.name, c.type) for c in form.controls]
+        return all(r in controls for r in required_controls)
+
     def authenticate(self, username, password):
         browser = mechanize.Browser(factory=mechanize.RobustFactory())
         cookiejar = cookielib.LWPCookieJar()
@@ -98,7 +107,7 @@ class Client(object):
         # Note: We should end up with a redirect.
         r = browser.open(self.AUTH_URL)
 
-        browser.select_form(name="signIn")
+        browser.select_form(predicate=self._find_signin_form)
         browser.form['email'] = username
         browser.form['password'] = password
         browser.form['create'] = False
