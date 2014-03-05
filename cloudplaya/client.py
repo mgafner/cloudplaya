@@ -5,6 +5,7 @@ import os
 import math
 import random
 import re
+from datetime import datetime
 
 import mechanize
 import requests
@@ -53,6 +54,9 @@ class Client(object):
     REFERER = 'https://www.amazon.com/gp/dmusic/mp3/player?ie=UTF8&' \
               'ref_=gno_yam_cldplyr&'
     ORIGIN = 'https://www.amazon.com'
+
+    METADATA_KEYS = frozenset(('title', 'trackNum', 'artistName', 'albumArtistName',
+                               'albumName', 'primaryGenre', 'discNum', 'albumReleaseDate', ))
 
     def __init__(self, session_file=None):
         self.session_file = session_file
@@ -209,7 +213,10 @@ class Client(object):
         return [item['url'] for item in items]
 
     def get_song_track_metadata(self, asins):
-        #TODO: verify that asin is legit
+        if len(asins) == 1 and not asins[0]:
+            print 'empty asin'
+            return
+
         data = {'marketplaceId': 'ATVPDKIKX0DER',
                 'caller': 'dataServices.getCatalogMetadata'}
 
@@ -221,6 +228,30 @@ class Client(object):
                                                 'getCatalogMetadataResult',
                                                 'catalogMetadataList'])
         return items
+
+    def update_song_metadata(self, song_id, metadata):
+        if not metadata:
+            print 'empty metadata'
+            return
+
+        data = {'caller': 'dataServices.updateTrackMetadata',
+                'trackIdList.member.1': song_id}
+
+        i = 1
+        for key, value in metadata.iteritems():
+            if key in self.METADATA_KEYS:
+                data['metadata.entry.%d.key' % (i)] = key
+
+                # only use the year since it seems to throw an error otherwise
+                if key == 'albumReleaseDate':
+                    value = datetime.strptime(value[:4], '%Y').isoformat() + 'Z'
+
+                data['metadata.entry.%d.value' % (i)] = value
+                i += 1
+        data['metadata.entry.1.key'] = 'title'
+        data['metadata.entry.1.value'] = 'amam'
+
+        result = self._get('updateTrackMetadata', data, api_v2=True)
 
     def get_songs(self,
                   search=[],

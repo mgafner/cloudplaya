@@ -26,11 +26,22 @@ class Song(object):
         self.sort_album_artist_name = metadata['sortAlbumArtistName']
         self.sort_album_name = metadata['sortAlbumName']
 
+        self._metadata = None
+
     def get_stream_url(self):
         return self.client.get_song_stream_urls([self.id])[0]
 
-    def get_metadata(self):
-        return self.client.get_song_track_metadata([self.asin])
+    def populate_metadata(self):
+        """Fetches the reference metadata as a dictionary."""
+        md_list = self.client.get_song_track_metadata([self.asin])
+        if md_list:
+            self._metadata = md_list[0]
+
+    def update_metadata(self):
+        if not self._metadata:
+            self.populate_metadata()
+        metadata = self._metadata
+        self.client.update_song_metadata(self.id, metadata)
 
     def __repr__(self):
         return '<Song "%s">' % self.title

@@ -2,7 +2,10 @@
 import getpass
 import os
 import sys
+import pprint
+import logging
 from optparse import OptionGroup, OptionParser
+from itertools import izip
 
 import requests
 
@@ -319,20 +322,24 @@ class GetStreamURLs(Command):
             sys.exit(1)
 
 
-class GetMetadata(Command):
-    """Lists stream/download URLs for songs."""
+class UpdateMetadata(Command):
+    """Sets metadata to Amazon's reference."""
     def run(self):
-        search = []
-
-        if not self.args:
-            sys.stderr.write('One or more song IDs must be specified\n')
-            sys.exit(1)
-
         try:
-            for data in self.client.get_song_track_metadata(self.args):
-                print data
+            songs = self.client.get_songs()
+            asins_to_songs = {song.asin: song for song in songs}
+            del asins_to_songs[None]
+            asins = asins_to_songs.keys()
+            metadata = self.client.get_song_track_metadata(asins)
+
+            for asin, md in izip(asins, metadata):
+                assert asin == md['asin']
+                song = asins_to_songs[asin]
+                song._metadata = md
+                song.update_metadata()
+
         except RequestError, e:
-            sys.stderr.write('Failed to get stream URLs: %s\n' % e)
+            logging.exception('Update metadata problem.')
             sys.exit(1)
 
 
@@ -345,7 +352,7 @@ COMMANDS = {
     'get-artists': GetArtists(),
     'get-songs': GetSongs(),
     'get-stream-urls': GetStreamURLs(),
-    'get-metadata': GetMetadata()
+    'update-metadata': UpdateMetadata()
 }
 
 def parse_options(args):
