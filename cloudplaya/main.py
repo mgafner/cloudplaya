@@ -281,6 +281,14 @@ class GetSongs(Command):
                           help='the title of the song')
 
     def run(self):
+        try:
+            for song in self.song_list():
+                self.output_item_formatted(song)
+        except RequestError, e:
+            sys.stderr.write('Failed to get artists: %s\n' % e)
+            sys.exit(1)
+
+    def song_list(self):
         search = []
 
         if self.options.artist:
@@ -291,13 +299,7 @@ class GetSongs(Command):
 
         if self.options.title:
             search.append(('title', 'EQUALS', self.options.title))
-
-        try:
-            for song in self.client.get_songs(search):
-                self.output_item_formatted(song)
-        except RequestError, e:
-            sys.stderr.write('Failed to get artists: %s\n' % e)
-            sys.exit(1)
+        return self.client.get_songs(search)
 
 
 class GetStreamURLs(Command):
@@ -317,6 +319,23 @@ class GetStreamURLs(Command):
             sys.exit(1)
 
 
+class GetMetadata(Command):
+    """Lists stream/download URLs for songs."""
+    def run(self):
+        search = []
+
+        if not self.args:
+            sys.stderr.write('One or more song IDs must be specified\n')
+            sys.exit(1)
+
+        try:
+            for data in self.client.get_song_track_metadata(self.args):
+                print data
+        except RequestError, e:
+            sys.stderr.write('Failed to get stream URLs: %s\n' % e)
+            sys.exit(1)
+
+
 COMMANDS = {
     'authenticate': Authenticate(),
     'download-album': DownloadAlbum(),
@@ -326,6 +345,7 @@ COMMANDS = {
     'get-artists': GetArtists(),
     'get-songs': GetSongs(),
     'get-stream-urls': GetStreamURLs(),
+    'get-metadata': GetMetadata()
 }
 
 def parse_options(args):
@@ -366,8 +386,8 @@ def parse_options(args):
     return options, command
 
 
-def main():
-    options, command = parse_options(sys.argv[1:])
+def create_command(input=sys.argv[1:]):
+    options, command = parse_options(input)
 
     client = Client(session_file=options.session_file)
 
@@ -378,6 +398,11 @@ def main():
         sys.exit(2)
 
     command.client = client
+    return command
+
+
+def main():
+    command = create_command()
     command.run()
 
 if __name__ == '__main__':

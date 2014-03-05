@@ -29,6 +29,9 @@ class Song(object):
     def get_stream_url(self):
         return self.client.get_song_stream_urls([self.id])[0]
 
+    def get_metadata(self):
+        return self.client.get_song_track_metadata([self.asin])
+
     def __repr__(self):
         return '<Song "%s">' % self.title
 
