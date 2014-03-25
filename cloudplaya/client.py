@@ -5,6 +5,7 @@ import os
 import math
 import random
 import re
+from datetime import datetime
 
 import mechanize
 import requests
@@ -24,6 +25,7 @@ class Client(object):
     AUTH_URL = 'https://www.amazon.com/ap/signin?openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fdmusic%2Fmp3%2Fplayer%3Fie%3DUTF8%26requestedView%3Dsongs'
     PLAYER_URL = 'https://www.amazon.com/gp/dmusic/mp3/player'
     API_URL = 'https://www.amazon.com/cirrus/'
+    API_URL_V2 = 'https://www.amazon.com/cirrus/2011-06-01/'
 
     APPCONFIG_RE = re.compile('\s*amznMusic.appConfig\s*=\s*({.*});$')
 
@@ -52,6 +54,9 @@ class Client(object):
     REFERER = 'https://www.amazon.com/gp/dmusic/mp3/player?ie=UTF8&' \
               'ref_=gno_yam_cldplyr&'
     ORIGIN = 'https://www.amazon.com'
+
+    METADATA_KEYS = frozenset(('title', 'trackNum', 'artistName', 'albumArtistName',
+                               'albumName', 'primaryGenre', 'discNum', 'albumReleaseDate', ))
 
     def __init__(self, session_file=None):
         self.session_file = session_file
@@ -216,6 +221,47 @@ class Client(object):
         ])
         return [item['url'] for item in items]
 
+    def get_song_track_metadata(self, asins):
+        if len(asins) == 1 and not asins[0]:
+            print 'empty asin'
+            return
+
+        data = {'marketplaceId': 'ATVPDKIKX0DER',
+                'caller': 'dataServices.getCatalogMetadata'}
+
+        for i, asin in enumerate(asins):
+            data['asinList.member.%d' % (i + 1)] = asin
+
+        result = self._get('getCatalogMetadata', data, api_v2=True)
+        items = self._get_payload_data(result, ['getCatalogMetadataResponse',
+                                                'getCatalogMetadataResult',
+                                                'catalogMetadataList'])
+        return items
+
+    def update_song_metadata(self, song_id, metadata):
+        if not metadata:
+            print 'empty metadata'
+            return
+
+        data = {'caller': 'dataServices.updateTrackMetadata',
+                'trackIdList.member.1': song_id}
+
+        i = 1
+        for key, value in metadata.iteritems():
+            if key in self.METADATA_KEYS:
+                data['metadata.entry.%d.key' % (i)] = key
+
+                # only use the year since it seems to throw an error otherwise
+                if key == 'albumReleaseDate':
+                    value = datetime.strptime(value[:4], '%Y').isoformat() + 'Z'
+
+                data['metadata.entry.%d.value' % (i)] = value
+                i += 1
+        data['metadata.entry.1.key'] = 'title'
+        data['metadata.entry.1.value'] = 'amam'
+
+        result = self._get('updateTrackMetadata', data, api_v2=True)
+
     def get_songs(self,
                   search=[],
                   sort=DEFAULT_SONG_SORT,
@@ -307,7 +353,22 @@ class Client(object):
             if not next_results_token:
                 return
 
-    def _get(self, operation, data):
+    def _build_data(self, data, operation):
+        data.update({
+            'Operation': operation,
+            'ContentType': 'JSON',
+            'customerInfo.customerId': self.customer_id,
+            'customerInfo.deviceId': self.device_id,
+            'customerInfo.deviceType': self.device_type,
+        })
+        return data
+
+    def _get(self, operation, data, api_v2=False):
+        if api_v2:
+            url = self.API_URL_V2
+        else:
+            url = self.API_URL
+
         headers = {
             'x-amzn-RequestId': self._make_request_id(),
             'csrf-rnd': self.csrf_rnd,
@@ -322,19 +383,13 @@ class Client(object):
             'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
         }
 
-        data.update({
-            'Operation': operation,
-            'ContentType': 'JSON',
-            'customerInfo.customerId': self.customer_id,
-            'customerInfo.deviceId': self.device_id,
-            'customerInfo.deviceType': self.device_type,
-        })
+        data = self._build_data(data, operation)
 
         # do a few retries.
         r = None
         for x in xrange(5):
             try:
-                r = requests.post(self.API_URL, data=data, headers=headers, timeout=2, verify=False)
+                r = requests.post(url, data=data, headers=headers, timeout=2, verify=False)
                 if r: break
             except requests.exceptions.SSLError, e:
                 logging.error("SSL error. Feh. %s" % e)

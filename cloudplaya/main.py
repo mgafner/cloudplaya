@@ -2,7 +2,10 @@
 import getpass
 import os
 import sys
+import pprint
+import logging
 from optparse import OptionGroup, OptionParser
+from itertools import izip
 
 import requests
 
@@ -288,6 +291,14 @@ class GetSongs(Command):
                           help='the title of the song')
 
     def run(self):
+        try:
+            for song in self.song_list():
+                self.output_item_formatted(song)
+        except RequestError, e:
+            sys.stderr.write('Failed to get artists: %s\n' % e)
+            sys.exit(1)
+
+    def song_list(self):
         search = []
 
         if self.options.artist:
@@ -298,13 +309,7 @@ class GetSongs(Command):
 
         if self.options.title:
             search.append(('title', 'EQUALS', self.options.title))
-
-        try:
-            for song in self.client.get_songs(search):
-                self.output_item_formatted(song)
-        except RequestError, e:
-            sys.stderr.write('Failed to get artists: %s\n' % e)
-            sys.exit(1)
+        return self.client.get_songs(search)
 
 
 class GetStreamURLs(Command):
@@ -324,6 +329,27 @@ class GetStreamURLs(Command):
             sys.exit(1)
 
 
+class UpdateMetadata(Command):
+    """Sets metadata to Amazon's reference."""
+    def run(self):
+        try:
+            songs = self.client.get_songs()
+            asins_to_songs = {song.asin: song for song in songs}
+            del asins_to_songs[None]
+            asins = asins_to_songs.keys()
+            metadata = self.client.get_song_track_metadata(asins)
+
+            for asin, md in izip(asins, metadata):
+                assert asin == md['asin']
+                song = asins_to_songs[asin]
+                song._metadata = md
+                song.update_metadata()
+
+        except RequestError, e:
+            logging.exception('Update metadata problem.')
+            sys.exit(1)
+
+
 COMMANDS = {
     'authenticate': Authenticate(),
     'download-album': DownloadAlbum(),
@@ -333,6 +359,7 @@ COMMANDS = {
     'get-artists': GetArtists(),
     'get-songs': GetSongs(),
     'get-stream-urls': GetStreamURLs(),
+    'update-metadata': UpdateMetadata()
 }
 
 def parse_options(args):
@@ -373,8 +400,8 @@ def parse_options(args):
     return options, command
 
 
-def main():
-    options, command = parse_options(sys.argv[1:])
+def create_command(input=sys.argv[1:]):
+    options, command = parse_options(input)
 
     client = Client(session_file=options.session_file)
 
@@ -385,6 +412,11 @@ def main():
         sys.exit(2)
 
     command.client = client
+    return command
+
+
+def main():
+    command = create_command()
     command.run()
 
 if __name__ == '__main__':
